@@ -1,0 +1,104 @@
+php_environment: &php_environment
+  environment:
+    APP_URL: http://0.0.0.0:9000
+    APP_ENV: testing
+    APP_DEBUG: true
+    APP_KEY: base64:3tsYILu9CPazfThXovQw+q7QeCsBvJ71yoJc9pgfrrM=
+
+version: 2
+jobs:
+  build:
+    docker:
+      - image: oliverlundquist/php7:latest
+        <<: *php_environment
+    steps:
+      - checkout
+      - run: curl -sS https://getcomposer.org/installer | php
+      - run: mv composer.phar /usr/local/bin/composer
+      - run: composer self-update
+      - restore_cache:
+          keys:
+            - composer-v1-{{ checksum "composer.json" }}
+      - run: composer install -o -n --prefer-dist
+      - save_cache:
+          key: composer-v1-{{ checksum "composer.json" }}
+          paths:
+            - vendor
+      - persist_to_workspace:
+          root: /usr/local/bin
+          paths:
+            - composer
+
+  chrome:
+    docker:
+      - image: oliverlundquist/php7:latest
+        <<: *php_environment
+      - image: selenium/standalone-chrome:latest
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - composer-v1-{{ checksum "composer.json" }}
+      - run:
+          command: php artisan serve --host=0.0.0.0 --port=9000
+          background: true
+      - run: TEST_BROWSER=chrome php artisan dusk
+      - store_artifacts:
+          path: tests/Browser/screenshots
+      - store_artifacts:
+          path: storage/logs
+
+  firefox:
+    docker:
+      - image: oliverlundquist/php7:latest
+        <<: *php_environment
+      - image: selenium/standalone-firefox:latest
+        environment:
+          SE_OPTS: -enablePassThrough false
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - composer-v1-{{ checksum "composer.json" }}
+      - run:
+          command: php artisan serve --host=0.0.0.0 --port=9000
+          background: true
+      - run: TEST_BROWSER=firefox php artisan dusk
+      - store_artifacts:
+          path: tests/Browser/screenshots
+      - store_artifacts:
+          path: storage/logs
+
+  edge:
+    docker:
+      - image: oliverlundquist/php7:latest
+        <<: *php_environment
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - composer-v1-{{ checksum "composer.json" }}
+      - run:
+          command: php artisan serve --host=0.0.0.0 --port=9000
+          background: true
+      - run: TEST_BROWSER=edge php artisan dusk
+      - store_artifacts:
+          path: tests/Browser/screenshots
+      - store_artifacts:
+          path: storage/logs
+
+workflows:
+  version: 2
+  build_test_deploy:
+    jobs:
+      - build
+      - chrome:
+          requires:
+            - build
+      - firefox:
+          requires:
+            - build
+      - edge:
+          requires:
+            - build
+
